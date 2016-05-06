@@ -2,6 +2,8 @@
 
 #include <err.h>
 #include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,7 +17,7 @@ int
 main(int argc, char **argv)
 {
 	unsigned long	 chan		= 0;
-	const char	*interface	= NULL;
+	const char	*ifname		= NULL;
 	const char	*destination	= NULL;
 
 	int ch;
@@ -45,13 +47,13 @@ main(int argc, char **argv)
 	if (argc != 2)
 		usage();
 
-	interface = argv[0];
+	if_name = argv[0];
 	destination = argv[1];
 
 	log_info("opening linkcat device on channel %d, interface %s",
-	    chan, interface);
+	    chan, if_name);
 	struct lc_dev dev;
-	if (lc_open(&dev, chan, interface) == -1)
+	if (lc_open(&dev, chan, if_name) == -1)
 		err(1, "lc_open");
 
 	log_info("closing linkcat device");

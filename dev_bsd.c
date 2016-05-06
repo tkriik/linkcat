@@ -8,7 +8,6 @@
 #include <err.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
-#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -22,7 +21,7 @@ static int set_ether_filter(struct lc_dev *);
 static int set_ieee80211_filter(struct lc_dev *);
 
 int
-lc_open(struct lc_dev *dev, uint16_t chan, const char *interface)
+lc_open(struct lc_dev *dev, const char *ifname, uint16_t chan, struct lc_addr dst)
 {
 	int rc;
 
@@ -30,6 +29,7 @@ lc_open(struct lc_dev *dev, uint16_t chan, const char *interface)
 
 	log_debug("opening BPF device");
 	const char *bpf_dev_paths[] = {
+	    "/dev/bpf",
 	    "/dev/bpf0",
 	    "/dev/bpf1",
 	    "/dev/bpf2",
@@ -57,9 +57,9 @@ lc_open(struct lc_dev *dev, uint16_t chan, const char *interface)
 	if (ioctl(dev->fd, BIOCSBLEN, &buf_len) == -1)
 		goto err;
 
-	log_debug("setting BPF device interface to %s", interface);
+	log_debug("setting BPF device interface to %s", ifname);
 	struct ifreq ifr;
-	strlcpy(ifr.ifr_name, interface, sizeof(ifr.ifr_name));
+	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(dev->fd, BIOCSETIF, &ifr) == -1)
 		goto err;
 
@@ -111,17 +111,17 @@ lc_open(struct lc_dev *dev, uint16_t chan, const char *interface)
 
 	int if_finished = 0;
 	for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_name == NULL || strcmp(interface, ifa->ifa_name) != 0)
+		if (ifa->ifa_name == NULL || strcmp(ifname, ifa->ifa_name) != 0)
 			continue;
 
 		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_LINK)
 			continue;
 
 		struct sockaddr_dl *sdl = (struct sockaddr_dl *)ifa->ifa_addr;
-		if (sdl->sdl_alen != sizeof(dev->addr))
+		if (sdl->sdl_alen != sizeof(dev->src))
 			continue;
 
-		memcpy(dev->addr, LLADDR(sdl), sizeof(dev->addr));
+		memcpy(dev->src, LLADDR(sdl), sizeof(dev->src));
 		if_finished = 1;
 		break;
 	}
@@ -132,6 +132,7 @@ lc_open(struct lc_dev *dev, uint16_t chan, const char *interface)
 	log_debug("setting BPF device filter");
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
+		rc = set_ether_filter(dev->fd, dev->chan, dst);
 		rc = set_ether_filter(dev);
 		break;
 	case LC_DLT_IEEE802_11:
@@ -156,37 +157,36 @@ err:
 	return -1;
 }
 
-
-
 void
 lc_close(struct lc_dev *dev)
 {
-	if (close(dev->fd) == -1)
-		warn("close");
+	close(dev->fd);
 }
 
 static int
-set_ether_filter(struct lc_dev *dev)
+set_ether_filter(int fd, uint16_t chan, struct lc_addr src)
 {
-	struct bpf_insn code[LC_ETHER_FILTER_LEN] = LC_ETHER_FILTER(dev->addr,
-	    dev->chan);
+	struct bpf_insn code[LC_ETHER_FILTER_LEN] =
+	    LC_ETHER_FILTER(src.data, chan);
+
 	struct bpf_program prog = {
 	    .bf_len = LC_ETHER_FILTER_LEN,
 	    .bf_insns = code
 	};
 
-	return ioctl(dev->fd, BIOCSETF, &prog);
+	return ioctl(fd, BIOCSETF, &prog);
 }
 
 static int
-set_ieee80211_filter(struct lc_dev *dev)
+set_ieee80211_filter(int fd, uint16_t chan, struct lc_addr src)
 {
-	struct bpf_insn code[LC_IEEE80211_FILTER_LEN] = LC_IEEE80211_FILTER(
-	    dev->addr, dev->chan);
+	struct bpf_insn code[LC_IEEE80211_FILTER_LEN] =
+	    LC_IEEE80211_FILTER(src.data, chan);
+
 	struct bpf_program prog = {
 	    .bf_len = LC_IEEE80211_FILTER_LEN,
 	    .bf_insns = code
 	};
 
-	return ioctl(dev->fd, BIOCSETF, &prog);
+	return ioctl(fd, BIOCSETF, &prog);
 }
