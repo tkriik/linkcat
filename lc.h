@@ -1,7 +1,6 @@
 #ifndef _LC_H_
 #define _LC_H_
 
-#include <sys/endian.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,7 +14,7 @@ enum lc_dlt {
 	LC_DLT_IEEE802_11	= 105		/* IEEE 802.11 wireless */
 };
 
-#define LC_ETHERTYPE		0x01FF		/* linkcat ethertype */
+#define LC_ETHERTYPE		0x88B5		/* linkcat ethertype */
 #define LC_ETHER_ADDR_LEN	LC_ADDR_LEN	/* Ethernet address length */
 
 /*
@@ -53,48 +52,39 @@ struct lc_ieee80211_hdr {
 } __packed;
 
 #define LC_TAG		0x6d656f77		/* linkcat tag */
-#define LC_DATA_SIZE	1024			/* linkcat data block size */
 #define LC_CHAN_MAX	65535			/* maximum linkcat channel value */
+#define LC_DATA_SIZE	1024			/* linkcat data block size */
 
 /*
- * linkcat payload.
+ * linkcat header.
  */
-struct lc_payload {
-	uint32_t	tag;			/* linkcat tag */
-	uint16_t	chan;			/* linkcat-specific virtual channel */
-	uint16_t	size;			/* data size */
-	uint8_t		data[LC_DATA_SIZE];	/* data block */
+struct lc_hdr {
+	uint32_t tag;				/* linkcat tag */
+	uint16_t chan;				/* linkcat-specific virtual channel */
 } __packed;
 
-#define LC_PAYLOAD_MIN (sizeof(struct lc_payload) - LC_DATA_SIZE)
-
 /*
- * linkcat Ethernet frame.
+ * linkcat Ethernet frame header.
  */
-struct lc_ether_frame {
+struct lc_ether_frame_hdr {
 	struct lc_ether_hdr hdr;		/* Ethernet header */
-	struct lc_payload payload;		/* linkcat payload */
+	struct lc_hdr lc;			/* linkcat header */
 } __packed;
 
+#define LC_ETHER_FRAME_MAX (sizeof(struct lc_ether_frame_hdr) + LC_DATA_SIZE)
+
 /*
- * linkcat IEEE 802.11 frame.
+ * linkcat IEEE 802.11 frame header.
  */
-struct lc_ieee80211_frame {
+struct lc_ieee80211_frame_hdr {
 	struct lc_ieee80211_hdr hdr;		/* IEEE 802.11 header */
 	struct lc_ieee8022_llc_hdr llc;		/* LLC header */
-	struct lc_payload payload;		/* linkcat payload */
+	struct lc_hdr lc;			/* linkcat header */
 } __packed;
 
-/*
- * Minimum frame sizes.
- */
-enum {
-	LC_ETHER_FRAME_MIN	= sizeof(struct lc_ether_hdr)
-				+ LC_PAYLOAD_MIN,
-	LC_IEEE80211_FRAME_MIN	= sizeof(struct lc_ieee80211_hdr)
-				+ sizeof(struct lc_ieee8022_llc_hdr)
-				+ LC_PAYLOAD_MIN
-};
+#define LC_IEEE80211_FRAME_MAX (sizeof(struct lc_ieee80211_frame_hdr) + LC_DATA_SIZE)
+
+#define LC_FRAME_BUF_SIZE 4096			/* linkcat frame buffer size */
 
 /*
  * Utility macros for device address comparison in filter initializers.
@@ -106,14 +96,14 @@ enum {
  * Frame offset constants for Ethernet filter initializer.
  */
 enum {
-	LC_ETHER_FRAME_SRC_OFFSET	= offsetof(struct lc_ether_frame, hdr)
+	LC_ETHER_FRAME_SRC_OFFSET	= offsetof(struct lc_ether_frame_hdr, hdr)
 					+ offsetof(struct lc_ether_hdr, src),
-	LC_ETHER_FRAME_TYPE_OFFSET	= offsetof(struct lc_ether_frame, hdr)
+	LC_ETHER_FRAME_TYPE_OFFSET	= offsetof(struct lc_ether_frame_hdr, hdr)
 					+ offsetof(struct lc_ether_hdr, type),
-	LC_ETHER_FRAME_TAG_OFFSET	= offsetof(struct lc_ether_frame, hdr)
-					+ offsetof(struct lc_payload, tag),
-	LC_ETHER_FRAME_CHAN_OFFSET	= offsetof(struct lc_ether_frame, payload)
-					+ offsetof(struct lc_payload, chan)
+	LC_ETHER_FRAME_TAG_OFFSET	= offsetof(struct lc_ether_frame_hdr, lc)
+					+ offsetof(struct lc_hdr, tag),
+	LC_ETHER_FRAME_CHAN_OFFSET	= offsetof(struct lc_ether_frame_hdr, lc)
+					+ offsetof(struct lc_hdr, chan)
 };
 
 /*
@@ -130,27 +120,11 @@ enum {
     BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
     BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),		\
     BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
-    BPF_STMT(BPF_RET + BPF_K,             sizeof(struct lc_ether_frame)),	\
+    BPF_STMT(BPF_RET + BPF_K,             LC_ETHER_FRAME_MAX),			\
     BPF_STMT(BPF_RET + BPF_K,             0)					\
 }
 
 #define LC_ETHER_FILTER_LEN 12
-
-/*
- * Ethernet read filter initializer (without source address).
- */
-#define LC_ETHER_FILTER_NO_SRC(chan) {					\
-    BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),			\
-    BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
-    BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
-    BPF_STMT(BPF_RET + BPF_K,             sizeof(struct lc_ether_frame)),	\
-    BPF_STMT(BPF_RET + BPF_K,             0)					\
-}
-
-#define LC_ETHER_FILTER_NO_SRC_LEN 8
 
 /*
  * IEEE 802.11 frame control constants for filter initializer.
@@ -173,14 +147,14 @@ enum {
  * IEEE 802.11 frame offset constants for filter initializer.
  */
 enum {
-	LC_IEEE80211_FRAME_FC_OFFSET	= offsetof(struct lc_ieee80211_frame, hdr)
+	LC_IEEE80211_FRAME_FC_OFFSET	= offsetof(struct lc_ieee80211_frame_hdr, hdr)
 					+ offsetof(struct lc_ieee80211_hdr, fc),
-	LC_IEEE80211_FRAME_SRC_OFFSET	= offsetof(struct lc_ieee80211_frame, hdr)
+	LC_IEEE80211_FRAME_SRC_OFFSET	= offsetof(struct lc_ieee80211_frame_hdr, hdr)
 					+ offsetof(struct lc_ieee80211_hdr, src),
-	LC_IEEE80211_FRAME_TAG_OFFSET	= offsetof(struct lc_ieee80211_frame, payload)
-					+ offsetof(struct lc_payload, tag),
-	LC_IEEE80211_FRAME_CHAN_OFFSET	= offsetof(struct lc_ieee80211_frame, payload)
-					+ offsetof(struct lc_payload, chan)
+	LC_IEEE80211_FRAME_TAG_OFFSET	= offsetof(struct lc_ieee80211_frame_hdr, lc)
+					+ offsetof(struct lc_hdr, tag),
+	LC_IEEE80211_FRAME_CHAN_OFFSET	= offsetof(struct lc_ieee80211_frame_hdr, lc)
+					+ offsetof(struct lc_hdr, chan)
 };
 
 /*
@@ -198,7 +172,7 @@ enum {
     BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
     BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_IEEE80211_FRAME_CHAN_OFFSET),	\
     BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
-    BPF_STMT(BPF_RET + BPF_K,             sizeof(struct lc_ieee80211_frame)),	\
+    BPF_STMT(BPF_RET + BPF_K,             LC_IEEE80211_FRAME_MAX),		\
     BPF_STMT(BPF_RET + BPF_K,             0)					\
 }
 

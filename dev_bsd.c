@@ -271,68 +271,47 @@ ssize_t
 lc_read(struct lc_dev *dev, void *buf, size_t len)
 {
 	uint8_t	pkt[BPF_BUF_LEN];
-	ssize_t	nread;
+	ssize_t	nr;
 
 	do {
-		nread = read(dev->fd, pkt, sizeof(pkt));
-		if (nread == -1 && errno == EINTR)
+		nr = read(dev->fd, pkt, sizeof(pkt));
+		if (nr == -1 && errno == EINTR)
 			continue;
-	} while (nread == 0);
+	} while (nr == 0);
 
-	if (nread == -1) {
+	if (nr == -1) {
 		warn("failed to read packet data");
 		return -1;
 	}
 
-	struct bpf_hdr *bpf_hdr = (struct bpf_hdr *)pkt;
-	size_t bpf_hdrlen = bpf_hdr->bh_hdrlen;
+	size_t lc_frame_hdr_size;
 
-	/* This should never happen. Check anyway. */
-	if ((size_t)nread < bpf_hdrlen) {
-		warnx("packet length under BPF header length");
-		return -1;
-	}
-
-	nread -= bpf_hdrlen;
-
-	size_t payload_off;
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
-		payload_off = offsetof(struct lc_ether_frame, payload);
+		lc_frame_hdr_size = sizeof(struct lc_ether_frame_hdr);
 		break;
 	case LC_DLT_IEEE802_11:
-		payload_off = offsetof(struct lc_ieee80211_frame, payload);
+		lc_frame_hdr_size = sizeof(struct lc_ieee80211_frame_hdr);
 		break;
 	default:
+		warnx("invalid datalink type");
 		return -1;
 	}
 
-	if ((size_t)nread < payload_off) {
-		warnx("no payload in packet");
+	struct bpf_hdr *bpf_hdr = (struct bpf_hdr *)pkt;
+	size_t bpf_hdr_len = bpf_hdr->bh_hdrlen;
+	size_t pkt_hdr_len = bpf_hdr_len + lc_frame_hdr_size;
+
+	if ((size_t)nr < pkt_hdr_len) {
+		warnx("incomplete header");
 		return -1;
 	}
 
-	nread -= payload_off;
+	nr -= pkt_hdr_len;
 
-	if ((size_t)nread < LC_PAYLOAD_MIN) {
-		warnx("payload size less than allowed");
-		return -1;
-	}
-
-	struct lc_payload *payload =
-	    (struct lc_payload *)(pkt + bpf_hdrlen + payload_off);
-
-	payload->tag = ntohl(payload->tag);
-	payload->chan = ntohs(payload->chan);
-	payload->size = ntohs(payload->size);
-
-	if (LC_PAYLOAD_MIN + payload->size != (size_t)nread) {
-		warnx("payload size mismatch ");
-		return -1;
-	}
-
-	size_t ncopy = len < payload->size ? len : payload->size;
-	memcpy(buf, payload->data, ncopy);
+	const uint8_t *data = pkt + pkt_hdr_len;
+	size_t ncopy = len < (size_t)nr ? len : (size_t)nr;
+	memcpy(buf, data, ncopy);
 
 	return ncopy;
 }
@@ -341,52 +320,62 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
  * Writes at most LC_DATA_SIZE through a linkcat device.
  * Returns the number of bytes written (including packet data)
  * on success, 0 otherwise.
- * TODO: exclude packet data length in return value
  */
 ssize_t
 lc_write(struct lc_dev *dev, const void *buf, size_t len)
 {
 	if (LC_DATA_SIZE < len) {
-		warnx("data size too large for writing");
+		warnx("data size over LC_DATA_SIZE");
 		return -1;
 	}
 
+	union {
+		struct	lc_ether_frame_hdr ether;
+		struct	lc_ieee80211_frame_hdr ieee80211;
+		uint8_t	buf[LC_FRAME_BUF_SIZE];
+	} frame_u;
+
+	struct	 lc_ether_hdr *ether;
+	struct	 lc_ieee80211_hdr *ieee80211;
+	struct	 lc_ieee8022_llc_hdr *llc;
+	struct	 lc_hdr *lc;
+	void	*data;
 	size_t	 frame_len;
-	void	*frame;
-	struct	 lc_payload *payload;
-	struct	 lc_ether_frame ether;
-	struct	 lc_ieee80211_frame ieee80211;
+
 
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
-		frame_len = LC_ETHER_FRAME_MIN + len;
-		frame = &ether;
-		payload = &ether.payload;
+		ether = &frame_u.ether.hdr;
+		lc = &frame_u.ether.lc;
+		data = ((uint8_t *)&frame_u) + sizeof(frame_u.ether);
+		frame_len = sizeof(frame_u.ether) + len;
 
-		memcpy(ether.hdr.dst, dev->dst, sizeof(ether.hdr.dst));
-		memcpy(ether.hdr.src, dev->hw_addr, sizeof(ether.hdr.src));
-		ether.hdr.type = htons(LC_ETHERTYPE);
+		memcpy(ether->dst, dev->dst, sizeof(ether->dst));
+		memcpy(ether->src, dev->hw_addr, sizeof(ether->src));
+		ether->type = htons(LC_ETHERTYPE);
 
 		break;
 
 	case LC_DLT_IEEE802_11:
-		frame_len = LC_IEEE80211_FRAME_MIN + len;
-		frame = &ieee80211;
-		payload = &ieee80211.payload;
+		ieee80211 = &frame_u.ieee80211.hdr;
+		llc = &frame_u.ieee80211.llc;
+		lc = &frame_u.ieee80211.lc;
+		data = ((uint8_t *)&frame_u) + sizeof(frame_u.ether);
+		frame_len = sizeof(frame_u.ieee80211) + len;
 
-		ieee80211.hdr.fc[0] = LC_IEEE80211_FC0_TYPE;
-		ieee80211.hdr.fc[1] = 0;
-		memset(ieee80211.hdr.dur, 0, sizeof(ieee80211.hdr.dur));
-		memcpy(ieee80211.hdr.dst, dev->dst, sizeof(ieee80211.hdr.dst));
-		memcpy(ieee80211.hdr.src, dev->hw_addr, sizeof(ieee80211.hdr.src));
-		memcpy(ieee80211.hdr.bssid, dev->bssid, sizeof(ieee80211.hdr.bssid));
-		memset(ieee80211.hdr.seq, 0, sizeof(ieee80211.hdr.seq));
+		ieee80211->fc[0] = LC_IEEE80211_FC0_TYPE;
+		ieee80211->fc[1] = 0;
+		memset(ieee80211->dur, 0, sizeof(ieee80211->dur));
+		memcpy(ieee80211->dst, dev->dst, sizeof(ieee80211->dst));
+		memcpy(ieee80211->src, dev->hw_addr, sizeof(ieee80211->src));
+		memcpy(ieee80211->bssid, dev->bssid, sizeof(ieee80211->bssid));
+		memset(ieee80211->seq, 0, sizeof(ieee80211->seq));
 
-		ieee80211.llc.dsap = 0;
-		ieee80211.llc.ssap = 0;
-		ieee80211.llc.ctl = 0;
-		memset(ieee80211.llc.oui, 0, sizeof(ieee80211.llc.oui));
-		ieee80211.llc.type = htons(LC_ETHERTYPE);
+		llc->dsap = 0;
+		llc->ssap = 0;
+		llc->ctl = 0;
+		memset(llc->oui, 0, sizeof(llc->oui));
+		llc->type = htons(LC_ETHERTYPE);
 
 		break;
 
@@ -395,14 +384,14 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		return -1;
 	}
 
-	payload->tag = htonl(LC_TAG);
-	payload->chan = htons(dev->chan);
-	payload->size = htons(len);
-	memcpy(payload->data, buf, len);
+	lc->tag = htonl(LC_TAG);
+	lc->chan = htons(dev->chan);
+
+	memcpy(data, buf, len);
 
 	ssize_t nw;
 	do {
-		nw = write(dev->fd, frame, frame_len);
+		nw = write(dev->fd, &frame_u, frame_len);
 		if (nw == -1 || (errno == EINTR || errno == ENOBUFS))
 			continue;
 		else
@@ -424,27 +413,15 @@ lc_close(struct lc_dev *dev)
 static int
 set_ether_filter(struct lc_dev *dev)
 {
-	struct bpf_insn code_default[LC_ETHER_FILTER_LEN]
+	struct bpf_insn code[LC_ETHER_FILTER_LEN]
 	    = LC_ETHER_FILTER(dev->src, dev->chan);
 
-	struct bpf_insn code_no_src[LC_ETHER_FILTER_NO_SRC_LEN]
-	    = LC_ETHER_FILTER_NO_SRC(dev->chan);
-
-	struct bpf_program prog_default = {
+	struct bpf_program prog = {
 	    .bf_len = LC_ETHER_FILTER_LEN,
-	    .bf_insns = code_default
+	    .bf_insns = code
 	};
 
-	struct bpf_program prog_no_src = {
-	    .bf_len = LC_ETHER_FILTER_NO_SRC_LEN,
-	    .bf_insns = code_no_src
-	};
-
-	struct bpf_program *prog = lc_addr_is_broadcast(dev->src)
-	    ? &prog_no_src
-	    : &prog_default;
-
-	return ioctl(dev->fd, BIOCSETF, prog);
+	return ioctl(dev->fd, BIOCSETF, &prog);
 }
 
 static int
