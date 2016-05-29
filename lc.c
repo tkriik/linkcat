@@ -16,13 +16,14 @@ void usage(void);
 int
 main(int argc, char **argv)
 {
-	const char	*iface		= NULL;
-	const char	*from_addr	= NULL;
-	const char	*to_addr	= NULL;
-	unsigned long	 chan		= 0;
+	const char	*iface	= NULL;
+	const char	*dst	= NULL;
+	const char	*src	= NULL;
+	const char	*bssid	= NULL;
+	unsigned long	 chan	= 0;
 
 	int ch;
-	while ((ch = getopt(argc, argv, "i:f:t:c:")) != -1) {
+	while ((ch = getopt(argc, argv, "i:c:t:f:b:")) != -1) {
 		switch (ch) {
 		case 'i':
 			iface = optarg;
@@ -34,11 +35,14 @@ main(int argc, char **argv)
 				usage();
 			}
 			break;
-		case 'f':
-			from_addr = optarg;
-			break;
 		case 't':
-			to_addr = optarg;
+			dst = optarg;
+			break;
+		case 'f':
+			src = optarg;
+			break;
+		case 'b':
+			bssid = optarg;
 			break;
 		default:
 			usage();
@@ -52,7 +56,7 @@ main(int argc, char **argv)
 		usage();
 
 	/* This program isn't too useful, if it can neither send or receive packets. */
-	if (from_addr == NULL && to_addr == NULL) {
+	if (src == NULL && dst == NULL) {
 		warnx("no source or destination address provided (-t, -f), "
 		      "please specify either option or both.");
 		usage();
@@ -60,13 +64,13 @@ main(int argc, char **argv)
 
 	/* Initialize a packet device context. */
 	struct lc_dev dev;
-	if (lc_open(&dev, iface, chan, from_addr, to_addr) == -1)
+	if (lc_open(&dev, iface, chan, dst, src, bssid) == -1)
 		return 1;
 	/*
-	 * If the source address (from_addr) is specified,
+	 * If the source address (src) is specified,
 	 * read from the socket/device and write to stdout.
 	 *
-	 * If the destination address (to_addr) is specified,
+	 * If the destination address (dst) is specified,
 	 * read from stdin and write to the socket/device.
 	 *
 	 * Reading from device to stdout and writing to device from-stdin
@@ -164,7 +168,8 @@ usage(void)
 	extern char *__progname;
 
 	fprintf(stderr,
-"usage: %s [-i interface] [-c channel] [-f from_address] [-t to_address]\n",
+"usage: %s [-i interface] [-c channel] [-t destination_address]\n"
+"          [-f source_address] [-b bssid]\n",
 	    __progname);
 	exit(1);
 }

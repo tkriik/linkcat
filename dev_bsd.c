@@ -27,7 +27,7 @@ static int set_ieee80211_filter(struct lc_dev *);
  */
 int
 lc_open(struct lc_dev *dev, const char *iface, int chan,
-    const char *from_addr, const char *to_addr)
+    const char *dst, const char *src, const char *bssid)
 {
 	dev->chan = chan;
 
@@ -41,18 +41,18 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	dev->r = 0;
 	dev->w = 0;
 
-	if (from_addr != NULL) {
-		if (lc_addr_parse(dev->from_addr, from_addr) == -1) {
-			warnx("invalid source address: %s", from_addr);
+	if (src != NULL) {
+		if (lc_addr_parse(dev->src, src) == -1) {
+			warnx("invalid source address: %s", src);
 			return -1;
 		}
 
 		dev->r = 1;
 	}
 
-	if (to_addr != NULL) {
-		if (lc_addr_parse(dev->to_addr, to_addr) == -1) {
-			warnx("invalid destination address: %s", to_addr);
+	if (dst != NULL) {
+		if (lc_addr_parse(dev->dst, dst) == -1) {
+			warnx("invalid destination address: %s", dst);
 			return -1;
 		}
 
@@ -206,10 +206,10 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 			continue;
 
 		struct sockaddr_dl *sdl = (struct sockaddr_dl *)ifa->ifa_addr;
-		if (sdl->sdl_alen != sizeof(dev->this_addr))
+		if (sdl->sdl_alen != sizeof(dev->hw_addr))
 			continue;
 
-		memcpy(dev->this_addr, LLADDR(sdl), sizeof(dev->this_addr));
+		memcpy(dev->hw_addr, LLADDR(sdl), sizeof(dev->hw_addr));
 		if_finished = 1;
 		break;
 	}
@@ -217,6 +217,16 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	if (!if_finished) {
 		warnx("failed to find address for interface");
 		goto err;
+	}
+
+	/* Use local hardware address as BSSID if BSSID is not specified. */
+	if (bssid == NULL)
+		memcpy(dev->bssid, dev->hw_addr, sizeof(dev->bssid));
+	else {
+		if (lc_addr_parse(dev->bssid, bssid) == -1) {
+			warnx("invalid bssid: %s", bssid);
+			goto err;
+		}
 	}
 
 	/* Set the proper filter code depending on the device's datalink type. */
@@ -251,11 +261,6 @@ err:
 	
 	return -1;
 }
-
-//static void payload_dump(struct lc_payload *p)
-//{
-//	warnx("{ .tag = %08x, .chan = %d, .size = %d }", p->tag, p->chan, p->size);
-//}
 
 /*
  * Reads at most LC_DATA_SIZE bytes from a linkcat device.
@@ -358,8 +363,8 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		frame = &ether;
 		payload = &ether.payload;
 
-		memcpy(ether.hdr.dst, dev->to_addr, sizeof(ether.hdr.dst));
-		memcpy(ether.hdr.src, dev->this_addr, sizeof(ether.hdr.src));
+		memcpy(ether.hdr.dst, dev->dst, sizeof(ether.hdr.dst));
+		memcpy(ether.hdr.src, dev->hw_addr, sizeof(ether.hdr.src));
 		ether.hdr.type = htons(LC_ETHERTYPE);
 
 		break;
@@ -372,9 +377,9 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		ieee80211.hdr.fc[0] = LC_IEEE80211_FC0_TYPE;
 		ieee80211.hdr.fc[1] = 0;
 		memset(ieee80211.hdr.dur, 0, sizeof(ieee80211.hdr.dur));
-		memcpy(ieee80211.hdr.dst, dev->to_addr, sizeof(ieee80211.hdr.dst));
-		memcpy(ieee80211.hdr.src, dev->this_addr, sizeof(ieee80211.hdr.src));
-		memcpy(ieee80211.hdr.bssid, dev->this_addr, sizeof(ieee80211.hdr.bssid));
+		memcpy(ieee80211.hdr.dst, dev->dst, sizeof(ieee80211.hdr.dst));
+		memcpy(ieee80211.hdr.src, dev->hw_addr, sizeof(ieee80211.hdr.src));
+		memcpy(ieee80211.hdr.bssid, dev->bssid, sizeof(ieee80211.hdr.bssid));
 		memset(ieee80211.hdr.seq, 0, sizeof(ieee80211.hdr.seq));
 
 		ieee80211.llc.dsap = 0;
@@ -420,7 +425,7 @@ static int
 set_ether_filter(struct lc_dev *dev)
 {
 	struct bpf_insn code_default[LC_ETHER_FILTER_LEN]
-	    = LC_ETHER_FILTER(dev->from_addr, dev->chan);
+	    = LC_ETHER_FILTER(dev->src, dev->chan);
 
 	struct bpf_insn code_no_src[LC_ETHER_FILTER_NO_SRC_LEN]
 	    = LC_ETHER_FILTER_NO_SRC(dev->chan);
@@ -435,7 +440,7 @@ set_ether_filter(struct lc_dev *dev)
 	    .bf_insns = code_no_src
 	};
 
-	struct bpf_program *prog = lc_addr_is_broadcast(dev->from_addr)
+	struct bpf_program *prog = lc_addr_is_broadcast(dev->src)
 	    ? &prog_no_src
 	    : &prog_default;
 
@@ -446,7 +451,7 @@ static int
 set_ieee80211_filter(struct lc_dev *dev)
 {
 	struct bpf_insn code[LC_IEEE80211_FILTER_LEN] =
-	    LC_IEEE80211_FILTER(dev->from_addr, dev->chan);
+	    LC_IEEE80211_FILTER(dev->src, dev->chan);
 
 	struct bpf_program prog = {
 	    .bf_insns = code,

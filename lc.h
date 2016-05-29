@@ -204,23 +204,6 @@ enum {
 
 #define LC_IEEE80211_FILTER_LEN 13
 
-/*
- * IEEE 802.11 read filter initializer (without source address).
- */
-#define LC_IEEE80211_FILTER_NO_SRC(chan) {					\
-	{ 0x30, 0, 0, 0x00000000 }, \
-	{ 0x54, 0, 0, 0x000000fc }, \
-	{ 0x15, 0, 5, 0x00000008 }, \
-	{ 0x20, 0, 0, 0x0000000c }, \
-	{ 0x15, 0, 3, 0x54a36a13 }, \
-	{ 0x28, 0, 0, 0x0000000a }, \
-	{ 0x15, 0, 1, 0x0000101c }, \
-	{ 0x6, 0, 0, 2048 }, \
-	{ 0x6, 0, 0, 0x00000000 }, \
-}
-
-#define LC_IEEE80211_FILTER_NO_SRC_LEN 9
-
 /* addr.c */
 extern const uint8_t LC_ADDR_BROADCAST[LC_ADDR_LEN];
 
@@ -235,15 +218,17 @@ struct lc_dev {
 	int	r, w;			/* read/write mode flags */
 
 	int	chan;			/* linkcat-specific virtual channel */
-	uint8_t	from_addr[LC_ADDR_LEN];	/* source device address */
-	uint8_t	to_addr[LC_ADDR_LEN];	/* destination device address */
+	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
+	uint8_t	src[LC_ADDR_LEN];	/* source device address */
+	uint8_t bssid[LC_ADDR_LEN];	/* bssid */
 
 	enum	lc_dlt dlt;		/* data-link level type */
-	uint8_t	this_addr[LC_ADDR_LEN];	/* local device address */
+	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
 };
 
 /* dev_*.c */
-int	lc_open(struct lc_dev *, const char *, int, const char *, const char *);
+int	lc_open(struct lc_dev *, const char *, int, const char *, const char *,
+	    const char *);
 ssize_t	lc_read(struct lc_dev *, void *, size_t);
 ssize_t lc_write(struct lc_dev *, const void *, size_t);
 void	lc_close(struct lc_dev *);
