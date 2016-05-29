@@ -1,19 +1,15 @@
 CFLAGS=		-g -O2 -std=c99 -pedantic -Wall -Wextra
+LFLAGS=		-lpthread
 
 SRC=		lc.c \
-		log.c
-
-SRC_BSD=	dev_bsd.c
+		addr.c \
+		dev_bsd.c
 
 BIN=		lc
 
-all:
-	@echo "No OS target specified. Please run 'make bsd'"
-	exit 1
-
-bsd: $(SRC) $(SRC_BSD)
+all: $(SRC)
 	mkdir -p bin/
-	$(CC) $(CFLAGS) -o bin/$(BIN) $(SRC) $(SRC_BSD)
+	$(CC) $(CFLAGS) -o bin/$(BIN) $(SRC) $(LFLAGS)
 
 clean:
 	rm -rf bin/

@@ -1,26 +1,27 @@
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "lc.h"
 
-const struct lc_addr LC_ADDR_BROADCAST = {
-	.data = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff }
-};
+const uint8_t LC_ADDR_BROADCAST[LC_ADDR_LEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 int
-lc_addr_parse(const char *s, struct lc_addr *addr)
+lc_addr_parse(uint8_t *a, const char *s)
 {
-	int nmatched = sscanf("%02x:%02x:%02x:%02x:%02x:%02x",
-	    addr.data[0], addr.data[1], addr.data[2],
-	    addr.data[3], addr.data[4], addr.data[5]);
+	int nmatch = sscanf(s,
+	    "%" SCNx8 ":" "%" SCNx8 ":" "%" SCNx8 ":"
+	    "%" SCNx8 ":" "%" SCNx8 ":" "%" SCNx8,
+	    &a[0], &a[1], &a[2], &a[3], &a[4], &a[5]);
 
-	if (nmatched != sizeof(addr.data))
+	if (nmatch != LC_ADDR_LEN)
 		return -1;
 
 	return 0;
 }
 
 int
-lc_addr_is_broadcast(struct lc_addr addr)
+lc_addr_is_broadcast(const uint8_t *a)
 {
-	return memcmp(LC_ADDR_BROADCAST.data, addr.data, LC_ADDR_LEN) == 0;
+	return memcmp(a, LC_ADDR_BROADCAST, LC_ADDR_LEN) == 0;
 }

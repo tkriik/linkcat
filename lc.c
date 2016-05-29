@@ -1,33 +1,31 @@
-#include <sys/select.h>
-
 #include <err.h>
 #include <errno.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 #include "lc.h"
-#include "log.h"
 
-static void usage(void);
+/* I/O thread workers. */
+void *lc_reader(void *);
+void *lc_writer(void *);
+
+void usage(void);
 
 int
 main(int argc, char **argv)
 {
+	const char	*iface		= NULL;
+	const char	*from_addr	= NULL;
+	const char	*to_addr	= NULL;
 	unsigned long	 chan		= 0;
-	const char	*ifname		= NULL;
-	const char	*destination	= NULL;
 
 	int ch;
-	while ((ch = getopt(argc, argv, "lvc:")) != -1) {
+	while ((ch = getopt(argc, argv, "i:f:t:c:")) != -1) {
 		switch (ch) {
-		case 'v':
-			if (log_verbose < 2)
-				log_verbose++;
-			else
-				usage();
+		case 'i':
+			iface = optarg;
 			break;
 		case 'c':
 			chan = strtoul(optarg, NULL, 10);
@@ -35,6 +33,12 @@ main(int argc, char **argv)
 				warnx("channel value must lie between 0 and 65536");
 				usage();
 			}
+			break;
+		case 'f':
+			from_addr = optarg;
+			break;
+		case 't':
+			to_addr = optarg;
 			break;
 		default:
 			usage();
@@ -44,27 +48,123 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 2)
+	if (argc != 0)
 		usage();
 
-	if_name = argv[0];
-	destination = argv[1];
+	/* This program isn't too useful, if it can neither send or receive packets. */
+	if (from_addr == NULL && to_addr == NULL) {
+		warnx("no source or destination address provided (-t, -f), "
+		      "please specify either option or both.");
+		usage();
+	}
 
-	log_info("opening linkcat device on channel %d, interface %s",
-	    chan, if_name);
+	/* Initialize a packet device context. */
 	struct lc_dev dev;
-	if (lc_open(&dev, chan, if_name) == -1)
-		err(1, "lc_open");
+	if (lc_open(&dev, iface, chan, from_addr, to_addr) == -1)
+		return 1;
+	/*
+	 * If the source address (from_addr) is specified,
+	 * read from the socket/device and write to stdout.
+	 *
+	 * If the destination address (to_addr) is specified,
+	 * read from stdin and write to the socket/device.
+	 *
+	 * Reading from device to stdout and writing to device from-stdin
+	 * are handled in separate threads if both roles are required.
+	 *
+	 * TODO: signals
+	 */
+	if (dev.r && dev.w) {
+		pthread_t read_thrd, write_thrd;
 
-	log_info("closing linkcat device");
+		if (pthread_create(&read_thrd, NULL, lc_reader, &dev) != 0)
+			err(1, "pthread_create");
+
+		if (pthread_create(&write_thrd, NULL, lc_writer, &dev) != 0)
+			err(1, "pthread_create");
+
+		// TODO: statistics 
+		if (pthread_join(read_thrd, NULL) != 0)
+			err(1, "pthread_join");
+
+		if (pthread_join(write_thrd, NULL) != 0)
+			err(1, "pthread_join");
+	} else {
+		if (dev.r)
+			lc_reader(&dev);
+		else if (dev.w)
+			lc_writer(&dev);
+		else
+			err(1, "no read nor write mode set");
+	}
+
+	// TODO: set signal handler with cleanup
 	lc_close(&dev);
 
 	return 0;
 }
 
-static void
+void *
+lc_reader(void *arg)
+{
+	struct lc_dev *dev = arg;
+
+	while (1) {
+		uint8_t buf[LC_DATA_SIZE];
+		ssize_t nr, nw;
+
+		nr = lc_read(dev, buf, sizeof(buf));
+		if (nr == -1)
+			continue;
+
+		do {
+			nw = write(STDOUT_FILENO, buf, nr);
+			if (nw == -1) {
+				if (errno == EINTR)
+					continue;
+				else
+					err(1, "write");
+			} else
+				break;
+		} while (1);
+	}
+
+	return NULL;
+}
+
+void *
+lc_writer(void *arg)
+{
+	struct lc_dev *dev = arg;
+
+	while (1) {
+		uint8_t buf[LC_DATA_SIZE];
+		ssize_t nr, nw;
+
+		nr = read(STDIN_FILENO, buf, sizeof(buf));
+		if (nr == -1) {
+			if (errno == EINTR)
+				continue;
+			else
+				err(1, "read");
+		}
+
+		if (nr == 0)
+			return NULL;
+		else
+			nw = lc_write(dev, buf, nr);
+	}
+
+	return NULL;
+}
+
+void
 usage(void)
 {
-	fprintf(stderr, "usage: lc [-vv] [-c channel] <interface> <destination>\n");
+	extern char *__progname;
+
+	fprintf(stderr,
+"usage: %s [-i interface] [-c channel] [-f from_address] [-t to_address]\n",
+	    __progname);
 	exit(1);
 }
