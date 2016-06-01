@@ -185,7 +185,7 @@ int lc_addr_parse(uint8_t *, const char *);
 int lc_addr_is_broadcast(const uint8_t *);
 
 /*
- * linkcat packet device context.
+ * packet device context.
  */
 struct lc_dev {
 	int	fd;			/* socket/device file descriptor */
@@ -200,11 +200,31 @@ struct lc_dev {
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
 };
 
-/* dev_*.c */
+/*
+ * Initializes a packet context with the given interface, channel,
+ * source address and destination address.
+ * Returns 0 on success, -1 otherwise.
+ */
 int	lc_open(struct lc_dev *, const char *, int, const char *, const char *,
 	    const char *);
+
+/*
+ * Reads at most LC_DATA_SIZE bytes from a linkcat device.
+ * Returns the number of bytes read (excluding packet data) on success,
+ * 0 otherwise.
+ */
 ssize_t	lc_read(struct lc_dev *, void *, size_t);
+
+/*
+ * Writes at most LC_DATA_SIZE through a linkcat device.
+ * Returns the number of bytes written (including packet data)
+ * on success, 0 otherwise.
+ */
 ssize_t lc_write(struct lc_dev *, const void *, size_t);
+
+/*
+ * Closes a device context.
+ */
 void	lc_close(struct lc_dev *);
 
 #endif

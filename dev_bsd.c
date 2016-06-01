@@ -20,11 +20,6 @@
 static int set_ether_filter(struct lc_dev *);
 static int set_ieee80211_filter(struct lc_dev *);
 
-/*
- * Initializes a packet device context with the given interface, channel,
- * source address and destionation address.
- * Returns 0 on success, -1 otherwise.
- */
 int
 lc_open(struct lc_dev *dev, const char *iface, int chan,
     const char *dst, const char *src, const char *bssid)
@@ -262,11 +257,6 @@ err:
 	return -1;
 }
 
-/*
- * Reads at most LC_DATA_SIZE bytes from a linkcat device.
- * Returns the number of bytes read (excluding packet data) on success,
- * 0 otherwise.
- */
 ssize_t
 lc_read(struct lc_dev *dev, void *buf, size_t len)
 {
@@ -316,11 +306,6 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
 	return ncopy;
 }
 
-/*
- * Writes at most LC_DATA_SIZE through a linkcat device.
- * Returns the number of bytes written (including packet data)
- * on success, 0 otherwise.
- */
 ssize_t
 lc_write(struct lc_dev *dev, const void *buf, size_t len)
 {
@@ -408,6 +393,7 @@ void
 lc_close(struct lc_dev *dev)
 {
 	close(dev->fd);
+	memset(dev, 0, sizeof(*dev));
 }
 
 static int

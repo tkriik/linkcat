@@ -31,7 +31,7 @@ main(int argc, char **argv)
 		case 'c':
 			chan = strtoul(optarg, NULL, 10);
 			if (LC_CHAN_MAX < chan) {
-				warnx("channel value must lie between 0 and 65536");
+				warnx("channel value must be under 65536");
 				usage();
 			}
 			break;
@@ -55,7 +55,10 @@ main(int argc, char **argv)
 	if (argc != 0)
 		usage();
 
-	/* This program isn't too useful, if it can neither send or receive packets. */
+	/*
+	 * This program isn't too useful, if it can neither
+	 * send or receive packets.
+	 */
 	if (src == NULL && dst == NULL) {
 		warnx("no source or destination address provided (-t, -f), "
 		      "please specify either option or both.");
