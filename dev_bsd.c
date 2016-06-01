@@ -22,7 +22,7 @@ static int set_ieee80211_filter(struct lc_dev *);
 
 int
 lc_open(struct lc_dev *dev, const char *iface, int chan,
-    const char *dst, const char *src, const char *bssid)
+    const char *dst, const char *src)
 {
 	dev->chan = chan;
 
@@ -214,16 +214,6 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 		goto err;
 	}
 
-	/* Use local hardware address as BSSID if BSSID is not specified. */
-	if (bssid == NULL)
-		memcpy(dev->bssid, dev->hw_addr, sizeof(dev->bssid));
-	else {
-		if (lc_addr_parse(dev->bssid, bssid) == -1) {
-			warnx("invalid bssid: %s", bssid);
-			goto err;
-		}
-	}
-
 	/* Set the proper filter code depending on the device's datalink type. */
 	int rc;
 	switch (dev->dlt) {
@@ -353,7 +343,7 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		memset(ieee80211->dur, 0, sizeof(ieee80211->dur));
 		memcpy(ieee80211->dst, dev->dst, sizeof(ieee80211->dst));
 		memcpy(ieee80211->src, dev->hw_addr, sizeof(ieee80211->src));
-		memcpy(ieee80211->bssid, dev->bssid, sizeof(ieee80211->bssid));
+		memcpy(ieee80211->bssid, dev->hw_addr, sizeof(ieee80211->bssid));
 		memset(ieee80211->seq, 0, sizeof(ieee80211->seq));
 
 		llc->dsap = 0;

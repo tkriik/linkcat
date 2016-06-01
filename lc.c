@@ -19,11 +19,10 @@ main(int argc, char **argv)
 	const char	*iface	= NULL;
 	const char	*dst	= NULL;
 	const char	*src	= NULL;
-	const char	*bssid	= NULL;
 	unsigned long	 chan	= 0;
 
 	int ch;
-	while ((ch = getopt(argc, argv, "i:c:t:f:b:")) != -1) {
+	while ((ch = getopt(argc, argv, "i:c:t:f:")) != -1) {
 		switch (ch) {
 		case 'i':
 			iface = optarg;
@@ -31,7 +30,7 @@ main(int argc, char **argv)
 		case 'c':
 			chan = strtoul(optarg, NULL, 10);
 			if (LC_CHAN_MAX < chan) {
-				warnx("channel value must be under 65536");
+				warnx("channel value must be less than 65536");
 				usage();
 			}
 			break;
@@ -40,9 +39,6 @@ main(int argc, char **argv)
 			break;
 		case 'f':
 			src = optarg;
-			break;
-		case 'b':
-			bssid = optarg;
 			break;
 		default:
 			usage();
@@ -67,7 +63,7 @@ main(int argc, char **argv)
 
 	/* Initialize a packet device context. */
 	struct lc_dev dev;
-	if (lc_open(&dev, iface, chan, dst, src, bssid) == -1)
+	if (lc_open(&dev, iface, chan, dst, src) == -1)
 		return 1;
 	/*
 	 * If the source address (src) is specified,
@@ -81,7 +77,7 @@ main(int argc, char **argv)
 	 *
 	 * TODO: signals
 	 */
-	if (dev.r && dev.w) {
+	if (src != NULL && dst != NULL) {
 		pthread_t read_thrd, write_thrd;
 
 		if (pthread_create(&read_thrd, NULL, lc_reader, &dev) != 0)
@@ -97,9 +93,9 @@ main(int argc, char **argv)
 		if (pthread_join(write_thrd, NULL) != 0)
 			err(1, "pthread_join");
 	} else {
-		if (dev.r)
+		if (src != NULL)
 			lc_reader(&dev);
-		else if (dev.w)
+		else if (dst != NULL)
 			lc_writer(&dev);
 		else
 			err(1, "no read nor write mode set");
@@ -171,8 +167,7 @@ usage(void)
 	extern char *__progname;
 
 	fprintf(stderr,
-"usage: %s [-i interface] [-c channel] [-t destination_address]\n"
-"          [-f source_address] [-b bssid]\n",
+"usage: %s [-i interface] [-c channel] [-f source] [-t destination]\n",
 	    __progname);
 	exit(1);
 }

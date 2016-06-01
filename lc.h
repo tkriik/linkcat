@@ -194,19 +194,17 @@ struct lc_dev {
 	int	chan;			/* linkcat-specific virtual channel */
 	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
 	uint8_t	src[LC_ADDR_LEN];	/* source device address */
-	uint8_t bssid[LC_ADDR_LEN];	/* bssid */
 
 	enum	lc_dlt dlt;		/* data-link level type */
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
 };
 
 /*
- * Initializes a packet context with the given interface, channel,
+ * Initializes a device context with the given interface, channel,
  * source address and destination address.
  * Returns 0 on success, -1 otherwise.
  */
-int	lc_open(struct lc_dev *, const char *, int, const char *, const char *,
-	    const char *);
+int	lc_open(struct lc_dev *, const char *, int, const char *, const char *);
 
 /*
  * Reads at most LC_DATA_SIZE bytes from a linkcat device.
