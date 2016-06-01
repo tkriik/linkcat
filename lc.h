@@ -113,21 +113,37 @@ enum {
  * Ethernet read filter initializer.
  */
 #define LC_ETHER_FILTER(src, chan) {						\
-    BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET + 2),	\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_W(src), 0, 9),		\
-    BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_H(src), 0, 7),		\
-    BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),			\
-    BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
-    BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),		\
-    BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
-    BPF_STMT(BPF_RET + BPF_K,             LC_ETHER_FRAME_MAX),			\
-    BPF_STMT(BPF_RET + BPF_K,             0)					\
+	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET + 2),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_W(src), 0, 9),		\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_H(src), 0, 7),		\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),		\
+	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
+	BPF_STMT(BPF_RET + BPF_K,             LC_ETHER_FRAME_MAX),		\
+	BPF_STMT(BPF_RET + BPF_K,             0)				\
 }
 
 #define LC_ETHER_FILTER_LEN 12
+
+/*
+ * Ethernet read filter initializer without source address rule.
+ */
+#define LC_ETHER_FILTER_NO_SRC(chan) {						\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),		\
+	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
+	BPF_STMT(BPF_RET + BPF_K,             LC_ETHER_FRAME_MAX),		\
+	BPF_STMT(BPF_RET + BPF_K,             0)				\
+}
+
+#define LC_ETHER_FILTER_NO_SRC_LEN 8
 
 /*
  * IEEE 802.11 frame control constants for filter initializer.

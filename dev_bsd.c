@@ -401,15 +401,27 @@ lc_close(struct lc_dev *dev)
 static int
 set_ether_filter(struct lc_dev *dev)
 {
-	struct bpf_insn code[LC_ETHER_FILTER_LEN]
+	struct bpf_insn code_default[LC_ETHER_FILTER_LEN]
 	    = LC_ETHER_FILTER(dev->src, dev->chan);
 
-	struct bpf_program prog = {
-	    .bf_len = LC_ETHER_FILTER_LEN,
-	    .bf_insns = code
+	struct bpf_insn code_no_src[LC_ETHER_FILTER_NO_SRC_LEN]
+	    = LC_ETHER_FILTER_NO_SRC(dev->chan);
+
+	struct bpf_program prog_default = {
+		.bf_len = LC_ETHER_FILTER_LEN,
+		.bf_insns = code_default
 	};
 
-	return ioctl(dev->fd, BIOCSETF, &prog);
+	struct bpf_program prog_no_src = {
+		.bf_len = LC_ETHER_FILTER_NO_SRC_LEN,
+		.bf_insns = code_no_src
+	};
+
+	struct bpf_program *prog = lc_addr_is_broadcast(dev->src)
+	    ? &prog_no_src
+	    : &prog_default;
+
+	return ioctl(dev->fd, BIOCSETF, prog);
 }
 
 static int
