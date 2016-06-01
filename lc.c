@@ -17,14 +17,18 @@ void usage(void);
 int
 main(int argc, char **argv)
 {
+	int		 local	= 0;
 	const char	*iface	= NULL;
 	const char	*dst	= NULL;
 	const char	*src	= NULL;
 	unsigned long	 chan	= 0;
 
 	int ch;
-	while ((ch = getopt(argc, argv, "i:c:t:f:")) != -1) {
+	while ((ch = getopt(argc, argv, "li:c:t:f:")) != -1) {
 		switch (ch) {
+		case 'l':
+			local = 1;
+			break;
 		case 'i':
 			iface = optarg;
 			break;
@@ -72,7 +76,7 @@ main(int argc, char **argv)
 
 	/* Initialize a packet device context. */
 	struct lc_dev dev;
-	if (lc_open(&dev, iface, chan, dst, src) == -1)
+	if (lc_open(&dev, iface, chan, src, dst, local) == -1)
 		return 1;
 
 	warnx("packet device opened at %s", dev.iface);
@@ -179,7 +183,7 @@ usage(void)
 	extern char *__progname;
 
 	fprintf(stderr,
-"usage: %s [-i interface] [-c channel] [-f source] [-t destination]\n",
+"usage: %s [-l] [-i interface] [-c channel] [-f source] [-t destination]\n",
 	    __progname);
 	exit(1);
 }

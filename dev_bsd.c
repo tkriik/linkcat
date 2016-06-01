@@ -17,12 +17,12 @@
 #define BPF_BUF_LEN 4096
 #define DLT_BUF_LEN 64
 
-static int set_ether_filter(struct lc_dev *);
+static int set_ether_filter(struct lc_dev *, int);
 static int set_ieee80211_filter(struct lc_dev *);
 
 int
 lc_open(struct lc_dev *dev, const char *iface, int chan,
-    const char *dst, const char *src)
+    const char *src, const char *dst, int local)
 {
 	dev->chan = chan;
 
@@ -230,7 +230,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	int rc;
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
-		rc = set_ether_filter(dev);
+		rc = set_ether_filter(dev, local);
 		break;
 	case LC_DLT_IEEE802_11:
 		rc = set_ieee80211_filter(dev);
@@ -399,27 +399,40 @@ lc_close(struct lc_dev *dev)
 }
 
 static int
-set_ether_filter(struct lc_dev *dev)
+set_ether_filter(struct lc_dev *dev, int local)
 {
 	struct bpf_insn code_default[LC_ETHER_FILTER_LEN]
 	    = LC_ETHER_FILTER(dev->src, dev->chan);
 
-	struct bpf_insn code_no_src[LC_ETHER_FILTER_NO_SRC_LEN]
-	    = LC_ETHER_FILTER_NO_SRC(dev->chan);
+	struct bpf_insn code_no_local[LC_ETHER_FILTER_NO_LOCAL_LEN]
+	    = LC_ETHER_FILTER_NO_LOCAL(dev->hw_addr, dev->chan);
+
+	struct bpf_insn code_any[LC_ETHER_FILTER_ANY_LEN]
+	    = LC_ETHER_FILTER_ANY(dev->chan);
 
 	struct bpf_program prog_default = {
 		.bf_len = LC_ETHER_FILTER_LEN,
 		.bf_insns = code_default
 	};
 
-	struct bpf_program prog_no_src = {
-		.bf_len = LC_ETHER_FILTER_NO_SRC_LEN,
-		.bf_insns = code_no_src
+	struct bpf_program prog_no_local = {
+		.bf_len = LC_ETHER_FILTER_NO_LOCAL_LEN,
+		.bf_insns = code_no_local
 	};
 
-	struct bpf_program *prog = lc_addr_is_broadcast(dev->src)
-	    ? &prog_no_src
-	    : &prog_default;
+	struct bpf_program prog_any = {
+		.bf_len = LC_ETHER_FILTER_ANY_LEN,
+		.bf_insns = code_any
+	};
+
+	struct bpf_program *prog;
+	if (lc_addr_is_broadcast(dev->src)) {
+		if (local)
+			prog = &prog_any;
+		else
+			prog = &prog_no_local;
+	} else
+		prog = &prog_default;
 
 	return ioctl(dev->fd, BIOCSETF, prog);
 }

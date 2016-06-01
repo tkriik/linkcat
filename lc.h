@@ -110,7 +110,8 @@ enum {
 };
 
 /*
- * Ethernet read filter initializer.
+ * Ethernet read filter progam for accepting linkcat packets
+ * from a specific host.
  */
 #define LC_ETHER_FILTER(src, chan) {						\
 	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET + 2),	\
@@ -130,9 +131,14 @@ enum {
 #define LC_ETHER_FILTER_LEN 12
 
 /*
- * Ethernet read filter initializer without source address rule.
+ * Ethernet read filter program for accepting linkcat packets
+ * from any address, except those from the local device address.
  */
-#define LC_ETHER_FILTER_NO_SRC(chan) {						\
+#define LC_ETHER_FILTER_NO_LOCAL(local, chan) {					\
+	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET + 2),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_W(local), 0, 2),		\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_SRC_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ADDR_H(local), 7, 0),		\
 	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),	\
 	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),		\
 	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),	\
@@ -143,7 +149,24 @@ enum {
 	BPF_STMT(BPF_RET + BPF_K,             0)				\
 }
 
-#define LC_ETHER_FILTER_NO_SRC_LEN 8
+#define LC_ETHER_FILTER_NO_LOCAL_LEN 12
+
+/*
+ * Ethernet read filter progam for accepting linkcat packets
+ * from any address, including those from the local device address.
+ */
+#define LC_ETHER_FILTER_ANY(chan) {						\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_TYPE_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_ETHERTYPE, 0, 5),		\
+	BPF_STMT(BPF_LD  + BPF_W   + BPF_ABS, LC_ETHER_FRAME_TAG_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   LC_TAG, 0, 3),			\
+	BPF_STMT(BPF_LD  + BPF_H   + BPF_ABS, LC_ETHER_FRAME_CHAN_OFFSET),	\
+	BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K,   (chan), 0, 1),			\
+	BPF_STMT(BPF_RET + BPF_K,             LC_ETHER_FRAME_MAX),		\
+	BPF_STMT(BPF_RET + BPF_K,             0)				\
+}
+
+#define LC_ETHER_FILTER_ANY_LEN 8
 
 /*
  * IEEE 802.11 frame control constants for filter initializer.
@@ -224,7 +247,7 @@ struct lc_dev {
  * source address and destination address.
  * Returns 0 on success, -1 otherwise.
  */
-int	lc_open(struct lc_dev *, const char *, int, const char *, const char *);
+int	lc_open(struct lc_dev *, const char *, int, const char *, const char *, int);
 
 /*
  * Reads at most LC_DATA_SIZE bytes from a linkcat device.
