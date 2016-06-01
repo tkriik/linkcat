@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "lc.h"
@@ -52,19 +53,30 @@ main(int argc, char **argv)
 		usage();
 
 	/*
-	 * This program isn't too useful, if it can neither
-	 * send or receive packets.
+	 * If no source or destination address provided,
+	 * set both to 'any'.
 	 */
 	if (src == NULL && dst == NULL) {
-		warnx("no source or destination address provided (-t, -f), "
-		      "please specify either option or both.");
-		usage();
+		src = "any";
+		dst = "any";
 	}
+
+	/*
+	 * Convert destination and/or source with 'any' value to broadcast.
+	 */
+	if (src != NULL && strcmp(src, "any") == 0)
+		src = "ff:ff:ff:ff:ff:ff";
+
+	if (dst != NULL && strcmp(dst, "any") == 0)
+		dst = "ff:ff:ff:ff:ff:ff";
 
 	/* Initialize a packet device context. */
 	struct lc_dev dev;
 	if (lc_open(&dev, iface, chan, dst, src) == -1)
 		return 1;
+
+	warnx("packet device opened at %s", dev.iface);
+
 	/*
 	 * If the source address (src) is specified,
 	 * read from the socket/device and write to stdout.

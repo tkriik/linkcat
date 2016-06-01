@@ -1,6 +1,9 @@
 #ifndef _LC_H_
 #define _LC_H_
 
+#include <sys/socket.h>
+#include <net/if.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -195,6 +198,7 @@ struct lc_dev {
 	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
 	uint8_t	src[LC_ADDR_LEN];	/* source device address */
 
+	char	iface[IFNAMSIZ];	/* interface name */
 	enum	lc_dlt dlt;		/* data-link level type */
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
 };

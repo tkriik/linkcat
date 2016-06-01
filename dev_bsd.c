@@ -103,6 +103,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	/* Find a suitable network interface. */
 	struct ifreq ifr;
 	if (iface != NULL) {
+		strlcpy(dev->iface, iface, sizeof(dev->iface));
 		strlcpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
 	} else {
 		struct ifaddrs *ifaddr;
@@ -111,22 +112,33 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 			return -1;
 		}
 
+		/*
+		 * Currently select the interface with the lexicographically
+		 * highest name that is not a loopback interface or down.
+		 */
 		for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 			if ((ifa->ifa_flags & IFF_UP) == 0)
 				continue;
 			if (ifa->ifa_flags & IFF_LOOPBACK)
 				continue;
-			iface = ifa->ifa_name;
+
+			if (iface == NULL)
+				iface = ifa->ifa_name;
+			else
+				iface = strcmp(iface, ifa->ifa_name) > 0
+				    ? iface
+				    : ifa->ifa_name;
 		}
 
-		if (iface == NULL) {
+		if (iface != NULL) {
+			strlcpy(dev->iface, iface, sizeof(dev->iface));
+			strlcpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
+			freeifaddrs(ifaddr);
+		} else {
 			warnx("no suitable network interface found");
 			freeifaddrs(ifaddr);
 			return -1;
 		}
-
-		strlcpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
-		freeifaddrs(ifaddr);
 	}
 
 	if (ioctl(dev->fd, BIOCSETIF, &ifr) == -1) {
@@ -185,7 +197,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 		goto err;
 	}
 
-	/* Retrieve the local interface address. */
+	/* Retrieve the local device address. */
 	struct ifaddrs *ifaddr;
 	if (getifaddrs(&ifaddr) == -1) {
 		warn("failed to retrieve interface addresses");
@@ -194,7 +206,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 
 	int if_finished = 0;
 	for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_name == NULL || strcmp(iface, ifa->ifa_name) != 0)
+		if (ifa->ifa_name == NULL || strcmp(dev->iface, ifa->ifa_name) != 0)
 			continue;
 
 		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_LINK)
