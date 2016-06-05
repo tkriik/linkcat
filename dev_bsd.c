@@ -379,7 +379,7 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 	ssize_t nw;
 	do {
 		nw = write(dev->fd, &frame_u, frame_len);
-		if (nw == -1 || (errno == EINTR || errno == ENOBUFS))
+		if (nw == -1 && errno == EINTR)
 			continue;
 		else
 			break;
