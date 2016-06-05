@@ -391,6 +391,20 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 	return nw;
 }
 
+int
+lc_stat(struct lc_dev *dev)
+{
+	struct bpf_stat st;
+
+	if (ioctl(dev->fd, BIOCGSTATS, &st) == -1)
+		return -1;
+
+	dev->nrecv = st.bs_recv;
+	dev->ndrop = st.bs_drop;
+
+	return 0;
+}
+
 void
 lc_close(struct lc_dev *dev)
 {

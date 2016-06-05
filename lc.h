@@ -240,6 +240,9 @@ struct lc_dev {
 	char	iface[IFNAMSIZ];	/* interface name */
 	enum	lc_dlt dlt;		/* data-link level type */
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
+
+	unsigned long nrecv;		/* # of packets received by filter*/
+	unsigned long ndrop;		/* # of accepted but dropped packets */
 };
 
 /*
@@ -262,6 +265,12 @@ ssize_t	lc_read(struct lc_dev *, void *, size_t);
  * on success, 0 otherwise.
  */
 ssize_t lc_write(struct lc_dev *, const void *, size_t);
+
+/*
+ * Updates the packet statistics (nrecv, ndrop) of a device context.
+ * Returns 0 on success, -1 otherwise.
+ */
+int	lc_stat(struct lc_dev *);
 
 /*
  * Closes a device context.
