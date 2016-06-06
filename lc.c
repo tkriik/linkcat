@@ -18,19 +18,17 @@ int
 main(int argc, char **argv)
 {
 	int		 local	= 0;
-	const char	*iface	= NULL;
+	unsigned long	 chan	= 0;
 	const char	*dst	= NULL;
 	const char	*src	= NULL;
-	unsigned long	 chan	= 0;
+
+	const char	*iface	= NULL;
 
 	int ch;
 	while ((ch = getopt(argc, argv, "li:c:t:f:")) != -1) {
 		switch (ch) {
 		case 'l':
 			local = 1;
-			break;
-		case 'i':
-			iface = optarg;
 			break;
 		case 'c':
 			chan = strtoul(optarg, NULL, 10);
@@ -53,8 +51,10 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 0)
+	if (argc != 1)
 		usage();
+
+	iface = argv[0];
 
 	/*
 	 * If no source or destination address provided,
@@ -79,7 +79,7 @@ main(int argc, char **argv)
 	if (lc_open(&dev, iface, chan, src, dst, local) == -1)
 		return 1;
 
-	warnx("packet device opened at %s", dev.iface);
+	warnx("packet device opened at %s", iface);
 
 	/*
 	 * If the source address (src) is specified,
@@ -183,7 +183,7 @@ usage(void)
 	extern char *__progname;
 
 	fprintf(stderr,
-"usage: %s [-l] [-i interface] [-c channel] [-f source] [-t destination]\n",
+"usage: %s [-l] [-c channel] [-f source] [-t destination] <interface>\n",
 	    __progname);
 	exit(1);
 }

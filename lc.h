@@ -237,7 +237,6 @@ struct lc_dev {
 	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
 	uint8_t	src[LC_ADDR_LEN];	/* source device address */
 
-	char	iface[IFNAMSIZ];	/* interface name */
 	enum	lc_dlt dlt;		/* data-link level type */
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
 
