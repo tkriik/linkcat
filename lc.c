@@ -76,7 +76,7 @@ main(int argc, char **argv)
 
 	/* Initialize a packet device context. */
 	struct lc_dev dev;
-	if (lc_open(&dev, iface, chan, src, dst, local) == -1)
+	if (lc_dev_open(&dev, iface, chan, src, dst, local) == -1)
 		return 1;
 
 	warnx("packet device opened at %s", iface);
@@ -118,7 +118,7 @@ main(int argc, char **argv)
 	}
 
 	// TODO: set signal handler with cleanup
-	lc_close(&dev);
+	lc_dev_close(&dev);
 
 	return 0;
 }
@@ -132,7 +132,7 @@ lc_reader(void *arg)
 		uint8_t buf[LC_DATA_SIZE];
 		ssize_t nr, nw;
 
-		nr = lc_read(dev, buf, sizeof(buf));
+		nr = lc_dev_read(dev, buf, sizeof(buf));
 		if (nr == -1)
 			continue;
 
@@ -171,7 +171,7 @@ lc_writer(void *arg)
 		if (nr == 0)
 			return NULL;
 		else
-			nw = lc_write(dev, buf, nr);
+			nw = lc_dev_write(dev, buf, nr);
 	}
 
 	return NULL;

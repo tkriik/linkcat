@@ -21,7 +21,7 @@ static int set_ether_filter(struct lc_dev *, int);
 static int set_ieee80211_filter(struct lc_dev *);
 
 int
-lc_open(struct lc_dev *dev, const char *iface, int chan,
+lc_dev_open(struct lc_dev *dev, const char *iface, int chan,
     const char *src, const char *dst, int local)
 {
 	dev->chan = chan;
@@ -222,7 +222,7 @@ err:
 }
 
 ssize_t
-lc_read(struct lc_dev *dev, void *buf, size_t len)
+lc_dev_read(struct lc_dev *dev, void *buf, size_t len)
 {
 	uint8_t	pkt[BPF_BUF_LEN];
 	ssize_t	nr;
@@ -271,7 +271,7 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
 }
 
 ssize_t
-lc_write(struct lc_dev *dev, const void *buf, size_t len)
+lc_dev_write(struct lc_dev *dev, const void *buf, size_t len)
 {
 	if (LC_DATA_SIZE < len) {
 		warnx("data size over LC_DATA_SIZE");
@@ -354,7 +354,7 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 }
 
 int
-lc_stat(struct lc_dev *dev)
+lc_dev_stat(struct lc_dev *dev)
 {
 	struct bpf_stat st;
 
@@ -368,7 +368,7 @@ lc_stat(struct lc_dev *dev)
 }
 
 void
-lc_close(struct lc_dev *dev)
+lc_dev_close(struct lc_dev *dev)
 {
 	close(dev->fd);
 	memset(dev, 0, sizeof(*dev));
