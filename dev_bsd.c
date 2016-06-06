@@ -104,7 +104,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	struct ifreq ifr;
 	strlcpy(ifr.ifr_name, iface, sizeof(ifr.ifr_name));
 	if (ioctl(dev->fd, BIOCSETIF, &ifr) == -1) {
-		warn("failed to set BPF device interface");
+		warn("failed to set BPF device interface to %s", iface);
 		goto err;
 	}
 
@@ -119,7 +119,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	};
 
 	if (ioctl(dev->fd, BIOCGDLTLIST, &dlt_list) == -1) {
-		warn("failed to retrieve available datalink types");
+		warn("failed to read available datalink types for %s", iface);
 		goto err;
 	}
 
@@ -141,7 +141,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	}
 
 	if (dlt == 0) {
-		warnx("no suitable datalink type found");
+		warnx("no suitable datalink type found for %s", iface);
 		goto err;
 	}
 
@@ -184,7 +184,7 @@ lc_open(struct lc_dev *dev, const char *iface, int chan,
 	}
 
 	if (!if_finished) {
-		warnx("failed to find address for interface");
+		warnx("failed to find hardware address of %s", iface);
 		goto err;
 	}
 
