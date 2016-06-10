@@ -128,25 +128,8 @@ lc_reader(void *arg)
 {
 	struct lc_dev *dev = arg;
 
-	while (1) {
-		uint8_t buf[LC_DATA_SIZE];
-		ssize_t nr, nw;
-
-		nr = lc_dev_read(dev, buf, sizeof(buf));
-		if (nr == -1)
-			continue;
-
-		do {
-			nw = write(STDOUT_FILENO, buf, nr);
-			if (nw == -1) {
-				if (errno == EINTR)
-					continue;
-				else
-					err(1, "write");
-			} else
-				break;
-		} while (1);
-	}
+	while (1)
+		(void)lc_dev_to_fd(dev, STDOUT_FILENO);
 
 	return NULL;
 }
@@ -157,21 +140,12 @@ lc_writer(void *arg)
 	struct lc_dev *dev = arg;
 
 	while (1) {
-		uint8_t buf[LC_DATA_SIZE];
-		ssize_t nr, nw;
+		ssize_t nw = lc_dev_from_fd(dev, STDIN_FILENO);
+		if (nw == -1)
+			continue;
 
-		nr = read(STDIN_FILENO, buf, sizeof(buf));
-		if (nr == -1) {
-			if (errno == EINTR)
-				continue;
-			else
-				err(1, "read");
-		}
-
-		if (nr == 0)
+		if (nw == 0)
 			return NULL;
-		else
-			nw = lc_dev_write(dev, buf, nr);
 	}
 
 	return NULL;

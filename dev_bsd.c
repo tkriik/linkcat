@@ -1,6 +1,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/uio.h>
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -14,7 +15,7 @@
 
 #include "lc.h"
 
-#define BPF_BUF_LEN 4096
+#define BPF_BUF_LEN 65536
 #define DLT_BUF_LEN 64
 
 static int set_ether_filter(struct lc_dev *, int);
@@ -29,12 +30,12 @@ lc_dev_open(struct lc_dev *dev, const char *iface, int chan,
 	/*
 	 * Parse the source and destination addresses
 	 * and set the device mode accordingly.
-	 *  - no destination address -> read only
-	 *  - no source address -> write only
-	 *  - both addresses -> read and write
+	 *  - no source address -> to_fd only
+	 *  - no destination address -> from_fd only
+	 *  - both addresses -> to_fd and from_fd
 	 */
-	dev->r = 0;
-	dev->w = 0;
+	dev->t = 0;
+	dev->f = 0;
 
 	if (src != NULL) {
 		if (lc_addr_parse(dev->src, src) == -1) {
@@ -42,7 +43,7 @@ lc_dev_open(struct lc_dev *dev, const char *iface, int chan,
 			return -1;
 		}
 
-		dev->r = 1;
+		dev->t = 1;
 	}
 
 	if (dst != NULL) {
@@ -51,7 +52,7 @@ lc_dev_open(struct lc_dev *dev, const char *iface, int chan,
 			return -1;
 		}
 
-		dev->w = 1;
+		dev->f = 1;
 	}
 
 	/* Open the first available BPF device file descriptor. */
@@ -71,11 +72,11 @@ lc_dev_open(struct lc_dev *dev, const char *iface, int chan,
 	};
 
 	int mode;
-	if (dev->r && dev->w)
+	if (dev->t && dev->f)
 		mode = O_RDWR;
-	else if (dev->r)
+	else if (dev->t)
 		mode = O_RDONLY;
-	else if (dev->w)
+	else if (dev->f)
 		mode = O_WRONLY;
 	else {
 		warnx("no read nor write mode set");
@@ -222,16 +223,18 @@ err:
 }
 
 ssize_t
-lc_dev_read(struct lc_dev *dev, void *buf, size_t len)
+lc_dev_to_fd(struct lc_dev *dev, int fd)
 {
 	uint8_t	pkt[BPF_BUF_LEN];
 	ssize_t	nr;
 
 	do {
 		nr = read(dev->fd, pkt, sizeof(pkt));
-		if (nr == -1 && errno == EINTR)
+		if (nr == 0 || (nr == -1 && errno == EINTR))
 			continue;
-	} while (nr == 0);
+		else
+			break;
+	} while (1);
 
 	if (nr == -1) {
 		warn("failed to read packet data");
@@ -252,29 +255,78 @@ lc_dev_read(struct lc_dev *dev, void *buf, size_t len)
 		return -1;
 	}
 
-	struct bpf_hdr *bpf_hdr = (struct bpf_hdr *)pkt;
-	size_t bpf_hdr_len = bpf_hdr->bh_hdrlen;
-	size_t pkt_hdr_len = bpf_hdr_len + lc_frame_hdr_size;
 
-	if ((size_t)nr < pkt_hdr_len) {
-		warnx("incomplete header");
-		return -1;
-	}
+	const uint8_t *p = pkt;
+	ssize_t total_nw = 0;
 
-	nr -= pkt_hdr_len;
+	do {
+		struct bpf_hdr *bpf_hdr = (struct bpf_hdr *)p;
+		size_t bpf_hdr_len = bpf_hdr->bh_hdrlen;
+		size_t pkt_hdr_len = bpf_hdr_len + lc_frame_hdr_size;
 
-	const uint8_t *data = pkt + pkt_hdr_len;
-	size_t ncopy = len < (size_t)nr ? len : (size_t)nr;
-	memcpy(buf, data, ncopy);
+		if ((size_t)nr < pkt_hdr_len) {
+			warnx("incomplete linkcat packet header");
+			return -1;
+		}
 
-	return ncopy;
+		size_t bpf_cap_len = bpf_hdr->bh_caplen;
+
+		/* This should never happen */
+		if (bpf_cap_len < pkt_hdr_len) {
+			warnx("invalid captured length in BPF header");
+			return -1;
+		}
+
+		const uint8_t *blkp = p + pkt_hdr_len;
+		size_t blk_len = bpf_cap_len - pkt_hdr_len;
+
+		ssize_t nw;
+		do {
+			nw = write(fd, blkp, blk_len);
+			if (nw == -1 && errno == EINTR)
+				continue;
+			else
+				break;
+		} while (1);
+
+		if (nw == -1) {
+			warn("failed to write to file descriptor");
+			return -1;
+		}
+
+		total_nw += nw;
+
+		size_t inc = BPF_WORDALIGN(bpf_hdr_len + bpf_cap_len);
+
+		/* This should never happen */
+		if ((size_t)nr < inc) {
+			warnx("invalid read count");
+			return -1;
+		}
+
+		p += inc;
+		nr -= inc;
+	} while (0 < nr);
+
+	return total_nw;
 }
 
 ssize_t
-lc_dev_write(struct lc_dev *dev, const void *buf, size_t len)
+lc_dev_from_fd(struct lc_dev *dev, int fd);
 {
-	if (LC_DATA_SIZE < len) {
-		warnx("data size over LC_DATA_SIZE");
+	uint8_t buf[BPF_BUF_LEN];
+	ssize_t nr;
+
+	do {
+		nr = read(fd, buf, sizeof(buf));
+		if (nr == -1 && errno == EINTR)
+			continue;
+		else
+			break;
+	} while (1);
+
+	if (nr == -1) {
+		warn("failed to read from file descriptor");
 		return -1;
 	}
 
@@ -290,7 +342,6 @@ lc_dev_write(struct lc_dev *dev, const void *buf, size_t len)
 	struct	 lc_hdr *lc;
 	void	*data;
 	size_t	 frame_len;
-
 
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:

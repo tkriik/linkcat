@@ -231,11 +231,11 @@ int lc_addr_is_broadcast(const uint8_t *);
  */
 struct lc_dev {
 	int	fd;			/* socket/device file descriptor */
-	int	r, w;			/* read/write mode flags */
+	int	t, f;			/* to/from mode flags */
 
 	int	chan;			/* linkcat-specific virtual channel */
-	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
 	uint8_t	src[LC_ADDR_LEN];	/* source device address */
+	uint8_t	dst[LC_ADDR_LEN];	/* destination device address */
 
 	enum	lc_dlt dlt;		/* data-link level type */
 	uint8_t	hw_addr[LC_ADDR_LEN];	/* local device address */
@@ -253,18 +253,16 @@ int	lc_dev_open(struct lc_dev *, const char *, int, const char *,
 	    const char *, int);
 
 /*
- * Reads at most LC_DATA_SIZE bytes from a linkcat device.
- * Returns the number of bytes read (excluding packet data) on success,
- * 0 otherwise.
+ * Writes buffered data from a linkcat device to the given file descriptor.
+ * Returns the number of bytes written, on success, -1 otherwise.
  */
-ssize_t	lc_dev_read(struct lc_dev *, void *, size_t);
+ssize_t	lc_dev_to_fd(struct lc_dev *, int);
 
 /*
- * Writes at most LC_DATA_SIZE through a linkcat device.
- * Returns the number of bytes written (including packet data)
- * on success, 0 otherwise.
+ * Writes buffered data from the given file descriptor to a linkcat device.
+ * Returns the number of bytes written on success, 0 on EOF, -1 otherwise.
  */
-ssize_t lc_dev_write(struct lc_dev *, const void *, size_t);
+ssize_t lc_dev_from_fd(struct lc_dev *, int);
 
 /*
  * Updates the packet statistics (nrecv, ndrop) of a device context.
