@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -222,7 +223,7 @@ err:
 }
 
 ssize_t
-lc_read(struct lc_dev *dev, void *buf, size_t len)
+lc_in(struct lc_dev *dev)
 {
 	uint8_t	pkt[BPF_BUF_LEN];
 	ssize_t	nr;
@@ -238,7 +239,7 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
 		return -1;
 	}
 
-	size_t lc_frame_hdr_size;
+	size_t lc_frame_hdr_size = 0;
 
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
@@ -248,8 +249,7 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
 		lc_frame_hdr_size = sizeof(struct lc_ieee80211_frame_hdr);
 		break;
 	default:
-		warnx("invalid datalink type");
-		return -1;
+		errx(1, "invalid datalink type");
 	}
 
 	struct bpf_hdr *bpf_hdr = (struct bpf_hdr *)pkt;
@@ -262,22 +262,22 @@ lc_read(struct lc_dev *dev, void *buf, size_t len)
 	}
 
 	nr -= pkt_hdr_len;
+	uint8_t *data = pkt + pkt_hdr_len;
 
-	const uint8_t *data = pkt + pkt_hdr_len;
-	size_t ncopy = len < (size_t)nr ? len : (size_t)nr;
-	memcpy(buf, data, ncopy);
+	ssize_t nw;
+	do
+		nw = write(STDOUT_FILENO, data, nr);
+	while (nw == -1 && errno == EINTR);
 
-	return ncopy;
+	if (nw == -1)
+		err(1, "failed to write to stdout");
+
+	return nw;
 }
 
 ssize_t
-lc_write(struct lc_dev *dev, const void *buf, size_t len)
+lc_out(struct lc_dev *dev)
 {
-	if (LC_DATA_SIZE < len) {
-		warnx("data size over LC_DATA_SIZE");
-		return -1;
-	}
-
 	union {
 		struct	lc_ether_frame_hdr ether;
 		struct	lc_ieee80211_frame_hdr ieee80211;
@@ -291,13 +291,12 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 	void	*data;
 	size_t	 frame_len;
 
-
 	switch (dev->dlt) {
 	case LC_DLT_EN10MB:
 		ether = &frame_u.ether.hdr;
 		lc = &frame_u.ether.lc;
 		data = ((uint8_t *)&frame_u) + sizeof(frame_u.ether);
-		frame_len = sizeof(frame_u.ether) + len;
+		frame_len = sizeof(frame_u.ether);
 
 		memcpy(ether->dst, dev->dst, sizeof(ether->dst));
 		memcpy(ether->src, dev->hw_addr, sizeof(ether->src));
@@ -310,7 +309,7 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		llc = &frame_u.ieee80211.llc;
 		lc = &frame_u.ieee80211.lc;
 		data = ((uint8_t *)&frame_u) + sizeof(frame_u.ether);
-		frame_len = sizeof(frame_u.ieee80211) + len;
+		frame_len = sizeof(frame_u.ieee80211);
 
 		ieee80211->fc[0] = LC_IEEE80211_FC0_TYPE;
 		ieee80211->fc[1] = 0;
@@ -329,26 +328,36 @@ lc_write(struct lc_dev *dev, const void *buf, size_t len)
 		break;
 
 	default:
-		warnx("invalid datalink type");
+		errx(1, "invalid datalink type");
 		return -1;
 	}
 
 	lc->tag = htonl(LC_TAG);
 	lc->chan = htons(dev->chan);
 
-	memcpy(data, buf, len);
+	ssize_t nr, nw;
+	do
+		nr = read(STDIN_FILENO, data, LC_DATA_SIZE);
+	while (nr == -1 && errno == EINTR);
 
-	ssize_t nw;
-	do {
+	if (nr == 0)
+		return 0;
+
+	if (nr == -1)
+		err(1, "failed to read from stdin");
+
+	frame_len += (size_t)nr;
+
+	do
 		nw = write(dev->fd, &frame_u, frame_len);
-		if (nw == -1 && errno == EINTR)
-			continue;
-		else
-			break;
-	} while (1);
+	while (nw == -1 && errno == EINTR);
 
-	if (nw == -1)
+	warnx("wrote %d bytes", (int)nw);
+
+	if (nw == -1) {
 		warn("failed to write packet data");
+		return -1;
+	}
 
 	return nw;
 }

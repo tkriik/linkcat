@@ -252,18 +252,18 @@ struct lc_dev {
 int	lc_open(struct lc_dev *, const char *, int, const char *, const char *, int);
 
 /*
- * Reads at most LC_DATA_SIZE bytes from a linkcat device.
- * Returns the number of bytes read (excluding packet data) on success,
- * 0 otherwise.
+ * Reads at most LC_DATA_SIZE bytes from a linkcat device to standard output.
+ * Returns the number of bytes read (excluding packet headers) on success,
+ * -1 otherwise.
  */
-ssize_t	lc_read(struct lc_dev *, void *, size_t);
+ssize_t lc_in(struct lc_dev *);
 
 /*
- * Writes at most LC_DATA_SIZE through a linkcat device.
- * Returns the number of bytes written (including packet data)
- * on success, 0 otherwise.
+ * Writes at most LC_DATA_SIZE bytes from standard input to a linkcat device.
+ * Returns the number of bytes written (excluding packet headers) on success,
+ * 0 on EOF and -1 otherwise.
  */
-ssize_t lc_write(struct lc_dev *, const void *, size_t);
+ssize_t lc_out(struct lc_dev *);
 
 /*
  * Updates the packet statistics (nrecv, ndrop) of a device context.
