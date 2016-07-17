@@ -13,7 +13,7 @@ lc [-l] [-c channel] [-f source] [-t destination] <interface>
 | option	| default value	| description
 | ----		| :----:	| ----
 | -l		|		| accept data from local device address
-| -c		| 0		| linkcat-specific virtual channel (0-65536)
+| -c		| 0		| linkcat-specific virtual channel (0-65535)
 | -f		| "any"		| source device address or "any"
 | -t		| "any"		| destination device address or "any"
 
