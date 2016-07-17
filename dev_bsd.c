@@ -352,8 +352,6 @@ lc_out(struct lc_dev *dev)
 		nw = write(dev->fd, &frame_u, frame_len);
 	while (nw == -1 && errno == EINTR);
 
-	warnx("wrote %d bytes", (int)nw);
-
 	if (nw == -1) {
 		warn("failed to write packet data");
 		return -1;
