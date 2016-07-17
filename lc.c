@@ -21,7 +21,6 @@ main(int argc, char **argv)
 	unsigned long	 chan	= 0;
 	const char	*dst	= NULL;
 	const char	*src	= NULL;
-
 	const char	*iface	= NULL;
 
 	int ch;
@@ -66,7 +65,7 @@ main(int argc, char **argv)
 	}
 
 	/*
-	 * Convert destination and/or source with 'any' value to broadcast.
+	 * Convert source and/or destination with 'any' value to broadcast.
 	 */
 	if (src != NULL && strcmp(src, "any") == 0)
 		src = "ff:ff:ff:ff:ff:ff";
@@ -94,19 +93,19 @@ main(int argc, char **argv)
 	 * TODO: signals
 	 */
 	if (src != NULL && dst != NULL) {
-		pthread_t read_thrd, write_thrd;
+		pthread_t r_thrd, w_thrd;
 
-		if (pthread_create(&read_thrd, NULL, lc_reader, &dev) != 0)
+		if (pthread_create(&r_thrd, NULL, lc_reader, &dev) != 0)
 			err(1, "pthread_create");
 
-		if (pthread_create(&write_thrd, NULL, lc_writer, &dev) != 0)
+		if (pthread_create(&w_thrd, NULL, lc_writer, &dev) != 0)
 			err(1, "pthread_create");
 
 		// TODO: statistics 
-		if (pthread_join(read_thrd, NULL) != 0)
+		if (pthread_join(r_thrd, NULL) != 0)
 			err(1, "pthread_join");
 
-		if (pthread_join(write_thrd, NULL) != 0)
+		if (pthread_join(w_thrd, NULL) != 0)
 			err(1, "pthread_join");
 	} else {
 		if (src != NULL)
